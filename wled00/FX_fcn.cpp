@@ -570,6 +570,7 @@ void Segment::setMode(uint8_t fx, bool loadDefaults) {
       if (modeBlending) startTransition(strip.getTransition()); // set effect transitions
 #endif
       mode = fx;
+      Serial.println("sermode fx:" + fx);
       // load default values from effect string
       if (loadDefaults) {
         int16_t sOpt;
@@ -1382,6 +1383,7 @@ void WS2812FX::setMode(uint8_t segid, uint8_t m) {
   if (m >= getModeCount()) m = getModeCount() - 1;
 
   if (_segments[segid].mode != m) {
+    Serial.println("setMode segid: " + String(segid) + " mode: " + String(m));
     _segments[segid].setMode(m); // do not load defaults
   }
 }
