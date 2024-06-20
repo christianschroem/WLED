@@ -26,7 +26,7 @@ void initAnimation1c(void) {
 }
 
 uint16_t animation1c(void) {
-  uint32_t cycleTime = 100000;
+  uint32_t cycleTime = 10000;
   uint32_t elapsed = strip.now - animation1cStartTime;
   uint32_t perc = elapsed % cycleTime;
   uint16_t segmentLength = 118;
@@ -62,30 +62,27 @@ void initAnimation2a(void) {
 
 // BMW M Colors walking around the strip
 uint16_t animation2a(void) {
-  uint32_t cycleTime = 10000;
-  uint32_t perc = strip.now % cycleTime;
-  uint16_t prog = (perc * (SEGLEN + 64)) / cycleTime; // Erweiterter Zyklus, um Auslaufen zu ermöglichen
+  uint32_t cycleTime = 10000; 
+  uint32_t cycleProgress = strip.now % cycleTime; // Progress within the current cycle in milliseconds
+  uint16_t animationStep = (cycleProgress * (SEGLEN + 64)) / cycleTime; // Calculated animation step based on progress
 
   // Definiere die Grundfarben
-  uint32_t colors[] = {0xFFFFFF, 0xFF0000, 0x0000FF, 0x00FFFF};  // Weiß, Rot, Blau, Hellblau
+  uint32_t colors[] = {0xFFFFFF, 0xFF0000, 0x0000FF, 0x00FFFF};  // White, red, blue, light blue
   uint16_t numColors = sizeof(colors) / sizeof(colors[0]);
   uint16_t ledsPerColor = 16;
-  uint16_t totalActiveLeds = ledsPerColor * numColors; // Insgesamt 64 LEDs
+  uint16_t totalActiveLeds = ledsPerColor * numColors; // A total of 64 LEDs
 
-  for (int i = 0; i < SEGLEN; i++) {
+   for (int i = 0; i < SEGLEN; i++) {
     // Standardmäßig LEDs ausschalten
     SEGMENT.setPixelColor(i, 0);
 
-    if (prog < SEGLEN) {
-      uint16_t index = (i + prog) % (SEGLEN + totalActiveLeds);
+    if (animationStep < SEGLEN + totalActiveLeds) {
+      uint16_t index = (i + animationStep) % (SEGLEN + totalActiveLeds);
       if (index < totalActiveLeds) {
         uint16_t colorIndex = (index / ledsPerColor) % numColors;
-        uint32_t col = colors[colorIndex];  // Wählt die entsprechende Grundfarbe
-        SEGMENT.setPixelColor(i, col);
+        uint32_t color = colors[colorIndex];  // Wählt die entsprechende Grundfarbe aus
+        SEGMENT.setPixelColor(i, color);
       }
-    } else if (i >= SEGLEN) {
-      // LEDs ausschalten, wenn der erweiterte Zyklus abgeschlossen ist
-      SEGMENT.setPixelColor(i, 0);
     }
   }
   return FRAMETIME;
@@ -97,21 +94,34 @@ void initAnimation2b(void) {
   animation2bStartTime = strip.now;
 }
 uint16_t animation2b(void) {
+  //SEGMENT.setPixelColor.setPixelColor(0, 0xFFFFFF);
   return FRAMETIME;
 }
 
 
 uint8_t currentEffect = 0;
 uint32_t lastChangeTime = 0;
-uint32_t effectDuration = 10000; 
+uint32_t effectDuration = 10000;
+bool delayElapsed = false;
+
 uint16_t playlist(void)
 {
-  
   uint32_t now = strip.now;
-  if (now - lastChangeTime >= effectDuration) {
-    currentEffect = (currentEffect + 1) % 3; 
+  
+  if (now < 1800){
+    return FRAMETIME;
+  }
 
+  if (lastChangeTime == 0) {
     lastChangeTime = now;
+    initAnimation1c();
+  }
+    
+
+  if (now - lastChangeTime >= effectDuration) {
+    currentEffect = (currentEffect + 1) % 3;
+    lastChangeTime = now;
+    
     switch (currentEffect) {
       case 0:
         initAnimation1c();
@@ -122,8 +132,9 @@ uint16_t playlist(void)
       case 2:
         initAnimation2b();
         break;
-    } 
+    }
   }
+
   switch (currentEffect) {
     case 0:
       return animation1c();
@@ -134,7 +145,6 @@ uint16_t playlist(void)
     default:
       return FRAMETIME;
   }
-  
 }
 
 
@@ -153,11 +163,13 @@ public:
     strip.addEffect(202, &animation2a, _data_FX_MODE_2A);
     strip.addEffect(203, &animation2b, _data_FX_MODE_2B);
     Serial.println("Custom animations added.");
-    strip.setSegment(0,0,118);
-    strip.setSegment(1,118,236);
-    strip.setMode(0, 5);
+    //strip.setSegment(0,0,118);
+    //strip.setSegment(1,118,236);
+    //strip.setSegment(2,236,354);
+    //strip.setSegment(3,354,472);
   }
 
   void loop() {
+
   }
 };
