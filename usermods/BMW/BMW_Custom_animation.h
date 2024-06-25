@@ -1,7 +1,7 @@
 #pragma once
 #include "wled.h"
 
-// Vorwärtsdeklarationen
+// Forward declarations
 void initAnimation1c(void);
 void initAnimation2a(void);
 void initAnimation2b(void);
@@ -9,6 +9,7 @@ uint16_t animation1c(void);
 uint16_t animation2a(void);
 uint16_t animation2b(void);
 
+// globals
 #define SEGMENT_LENGTH 120
 uint8_t currentEffect = 0;
 
@@ -16,13 +17,15 @@ uint8_t currentEffect = 0;
 // -------------------------------------------------------- 
 // ----------------------ANIMATION 1C---------------------- 
 // --------------------------------------------------------
+
+
 static bool animation1cReset = false;
 uint16_t animation1c(void) {
   uint32_t col0 = 0xFFFFFF;
   uint32_t col1 = 0x000000;
-  uint32_t cycleTime = 10000;  // Fest auf 10000 gesetzt
+  uint32_t cycleTime = 10000;
 
-  // Anzahl der Segmente und Länge eines Segments
+  
   const uint8_t segmentCount = 4;
   const uint16_t segmentLength = SEGMENT_LENGTH;
 
@@ -39,10 +42,10 @@ uint16_t animation1c(void) {
 
   uint32_t perc = strip.now % cycleTime;
   uint16_t prog = (perc * 65535) / cycleTime;
-  uint16_t ledIndex = (prog * segmentLength) >> 16;  // Direkte Berechnung des Fortschritts in einem Segment
+  uint16_t ledIndex = (prog * segmentLength) >> 16; 
   
  for (int s = 0; s < segmentCount; s++) {
-    bool invert = (s == 1 || s == 3);  // Invertiere für Segmente 2 und 4
+    bool invert = (s == 1 || s == 3);  // Invert for segments 2 and 4
 
     for (int i = 0; i < segmentLength; i++) {
       uint16_t index = s * segmentLength + (invert ? (segmentLength - 1 - i) : i);
@@ -64,6 +67,8 @@ uint16_t animation1c(void) {
 // -------------------------------------------------------- 
 // ----------------------ANIMATION 2A---------------------- 
 // --------------------------------------------------------
+
+
 static bool animation2aReset = false;
 
 uint16_t animation2a(void) {
@@ -115,12 +120,15 @@ if (!animation2aReset) {
   return FRAMETIME;
 }
 
+// -------------------------------------------------------- 
+// ----------------------ANIMATION 2B---------------------- 
+// --------------------------------------------------------
+
 static uint32_t animation2bStartTime;
 static bool animation2breset = false;
 bool newLightStarted = false;
 uint32_t newLightStartTime = 0;
 
-// Constants for readability
 const uint32_t CYCLE_TIME = 10000;
 const uint16_t TOTAL_ACTIVE_LEDS = 36; // Sum of white and colored LEDs
 const uint16_t SEGMENT_OFFSET = SEGMENT_LENGTH + TOTAL_ACTIVE_LEDS;
@@ -151,7 +159,8 @@ void setSegmentColors(int segmentStart, uint16_t animationStep, ColorConfig conf
     }
 }
 
-// Main animation function
+
+
 uint16_t animation2b(void) {
     if(!animation2breset) {
         animation2bStartTime = strip.now;
@@ -177,12 +186,10 @@ uint16_t animation2b(void) {
     bool isRedNearEnd = (SEGMENT_LENGTH - animationStep) <= 10;
 
 
-     // Setzen der Farben für jedes Segment mit Berücksichtigung der Richtung
+    //Switching segments
     if (!isRedSecondPhase) {
-        // Erste Phase: Animation läuft nur auf Segment 1
         setSegmentColors(0, animationStep, redConfig, true);
     } else {
-        // Zweite Phase: Animation wechselt zu Segment 2
         setSegmentColors(SEGMENT_LENGTH, animationStep, redConfig, false);
     }
 
@@ -192,17 +199,18 @@ uint16_t animation2b(void) {
         setSegmentColors(3 * SEGMENT_LENGTH, blueAnimationStep, blueConfig, false); // Segment 4 vorwärts
      }
 
+    //new light = light blue (3rd)
      if (isRedNearEnd && !newLightStarted) {
       newLightStarted = true;
-      newLightStartTime = strip.now; // Startzeitpunkt des neuen Lichts festlegen
+      newLightStartTime = strip.now;
 }
 
     if (newLightStarted) {
-    // Berechnen des Fortschritts des neuen Lichts basierend auf seiner eigenen Startzeit
+    
     uint32_t newLightProgress = (strip.now - newLightStartTime) % CYCLE_TIME;
     uint16_t newLightAnimationStep = (newLightProgress * SEGMENT_OFFSET) / CYCLE_TIME;
 
-    // Stellen Sie sicher, dass das neue Licht unabhängig animiert wird
+    //3rd light
     setSegmentColors(0, newLightAnimationStep, newLightConfig, true);
 }
    if (animationStep == 155) {
@@ -214,25 +222,18 @@ return FRAMETIME;
 }
 
 
-
-
-
-uint32_t lastChangeTime = 0;
-uint32_t effectDuration = 10000;
-bool delayElapsed = false;
+// --------------------------------------------------------
+// ----------------------PLAYLIST--------------------------
+// --------------------------------------------------------
 
 uint16_t playlist(void) {
-  uint32_t now = strip.now;
   
   // Add a start delay to wait for device ready (avoid output lag)
-  if (now < 1800) {
+
+  if (strip.now < 1800) {
     return FRAMETIME;
   }
 
-  if (lastChangeTime == 0) {
-    lastChangeTime = now;
-    resetTimebase();
-  }
 
   switch (currentEffect) {
     case 0:
@@ -246,11 +247,19 @@ uint16_t playlist(void) {
   }
 }
 
+// --------------------------------------------------------
+// ----------------------MODES-----------------------------
+// --------------------------------------------------------
 
 static const char _data_FX_MODE_PLAYLIST[] PROGMEM = "BMWPLAYLIST@!,!;!,!;!";
 static const char _data_FX_MODE_1C[] PROGMEM = "BMW1C@!,!;!,!;!";
 static const char _data_FX_MODE_2A[] PROGMEM = "BMW2A@!,!;!,!;!";
 static const char _data_FX_MODE_2B[] PROGMEM = "BMW2B@!,!;!,!;!";
+
+
+// --------------------------------------------------------
+// ----------------------USERMOD---------------------------
+// --------------------------------------------------------
 
 class BmwCustomAnimation : public Usermod {
 
