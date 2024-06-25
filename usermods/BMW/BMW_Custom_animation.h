@@ -8,63 +8,51 @@ void initAnimation2b(void);
 uint16_t animation1c(void);
 uint16_t animation2a(void);
 uint16_t animation2b(void);
+
+#define SEGMENT_LENGTH 120
 uint8_t currentEffect = 0;
 
-void setSegmentPixels(uint16_t startIndex, uint16_t segLen, uint16_t ledIndex, uint16_t rem, bool invert) {
-  for (int i = 0; i < segLen; i++) {
-    uint16_t index = startIndex + (invert ? (segLen - 1 - i) : i);
-    uint32_t col0 = 0xFFFFFF;
-    uint32_t col1 = 0x000000;
-    if (i < ledIndex) {
-      SEGMENT.setPixelColor(index, col1);
-    } else {
-      SEGMENT.setPixelColor(index, col0);
-      if (i == ledIndex) SEGMENT.setPixelColor(index, color_blend(col1, col0, rem));
+
+// -------------------------------------------------------- 
+// ----------------------ANIMATION 1C---------------------- 
+// --------------------------------------------------------
+static bool animation1cReset = false;
+uint16_t animation1c(void) {
+  uint32_t col0 = 0xFFFFFF;
+  uint32_t col1 = 0x000000;
+  uint32_t cycleTime = 10000;  // Fest auf 10000 gesetzt
+
+  // Anzahl der Segmente und Länge eines Segments
+  const uint8_t segmentCount = 4;
+  const uint16_t segmentLength = SEGMENT_LENGTH;
+
+  if (!animation1cReset) {
+    resetTimebase();
+    for (int s = 0; s < segmentCount; s++) {
+      for (int i = 0; i < segmentLength; i++) {
+        SEGMENT.setPixelColor(s * segmentLength + i, col0);
+      }
+    }
+    animation1cReset = true;
+    return FRAMETIME;
+  }
+
+  uint32_t perc = strip.now % cycleTime;
+  uint16_t prog = (perc * 65535) / cycleTime;
+  uint16_t ledIndex = (prog * segmentLength) >> 16;  // Direkte Berechnung des Fortschritts in einem Segment
+  
+ for (int s = 0; s < segmentCount; s++) {
+    bool invert = (s == 1 || s == 3);  // Invertiere für Segmente 2 und 4
+
+    for (int i = 0; i < segmentLength; i++) {
+      uint16_t index = s * segmentLength + (invert ? (segmentLength - 1 - i) : i);
+      SEGMENT.setPixelColor(index, (i > ledIndex) ? col0 : col1);
     }
   }
-}
-
-static uint32_t animation1cStartTime;
-static bool animation1cCompleted = false;
-void initAnimation1c(void) {
-  animation1cStartTime = strip.now;
-  animation1cCompleted = false;
-}
-
-uint16_t animation1c(void) {
-  uint32_t cycleTime = 10000;
-  uint32_t elapsed = strip.now - animation1cStartTime;
-  uint32_t perc = elapsed % cycleTime;
-  uint16_t segmentLength = 118;
-  uint16_t prog = (perc * 32767) / cycleTime;
-  uint16_t ledIndex = (prog * segmentLength) >> 15;
-  uint16_t rem = 0;
-  rem = (prog * segmentLength) * 2;
-  rem /= (SEGMENT.intensity + 1);
-  if (rem > 255) rem = 255;
-
-  // Segment 1
-  setSegmentPixels(0, segmentLength, ledIndex, rem, false);
-
-  // Segment 2 (invertiert)
-  setSegmentPixels(1 * segmentLength, segmentLength, ledIndex, rem, true);
-
-  // Segment 3
-  setSegmentPixels(2 * segmentLength, segmentLength, ledIndex, rem, false);
-
-  // Segment 4 (invertiert)
-  setSegmentPixels(3 * segmentLength, segmentLength, ledIndex, rem, true);
-
-  // Check if the animation is almost finished
-  if (prog >= 32767 - (32767 / segmentLength) && !animation1cCompleted) {
+  if(ledIndex >= 119) {
     Serial.println("animation 1c finished");
-    animation1cCompleted = true;
-    initAnimation2a();
+    resetTimebase();
     currentEffect = 1;
-  }
-
-  if (prog < 32767 - (32767 / segmentLength)) {
-    animation1cCompleted = false;
   }
 
   return FRAMETIME;
@@ -72,18 +60,15 @@ uint16_t animation1c(void) {
 
 
 
-static uint32_t animation2aStartTime;
 
-void initAnimation2a(void) {
-  animation2aStartTime = strip.now;
-}
-
-#define SEGMENT_LENGTH 118 
+// -------------------------------------------------------- 
+// ----------------------ANIMATION 2A---------------------- 
+// --------------------------------------------------------
+static bool animation2aReset = false;
 
 uint16_t animation2a(void) {
-  bool first = false;
+    
   uint32_t cycleTime = 10000; 
-
   uint32_t cycleProgress = strip.now % cycleTime; 
   uint16_t animationStep = (cycleProgress * (SEGMENT_LENGTH * 2 + 64)) / cycleTime; 
 
@@ -93,6 +78,19 @@ uint16_t animation2a(void) {
   uint16_t ledsPerColor = 16;
   uint16_t totalActiveLeds = ledsPerColor * numColors; // Insgesamt 64 LEDs
 
+if(animationStep <= 66 && !animation2aReset)  {
+      return FRAMETIME;
+    }
+
+if (!animation2aReset) {
+    for (int s = 0; s < SEGMENT_LENGTH*4; s++) {
+        SEGMENT.setPixelColor(s, 0x000000);
+    }
+    animation2aReset = true;
+    return FRAMETIME;
+}
+
+  animation2aReset = true;
    for (int i = 0; i < SEGMENT_LENGTH * 2; i++) {
     // Standardmäßig LEDs ausschalten
     SEGMENT.setPixelColor(i, 0);
@@ -109,82 +107,110 @@ uint16_t animation2a(void) {
       }
     }
   }
-
-  //TODO: Fix bug, step 65 is two times in the full cycle
    if (animationStep == 65) {
-    first = true;
     Serial.println("animation 2a finished");
-    //currentEffect = 2;
+    currentEffect = 2;
   }
+
   return FRAMETIME;
 }
 
 static uint32_t animation2bStartTime;
 static bool animation2breset = false;
+bool newLightStarted = false;
+uint32_t newLightStartTime = 0;
 
+// Constants for readability
+const uint32_t CYCLE_TIME = 10000;
+const uint16_t TOTAL_ACTIVE_LEDS = 36; // Sum of white and colored LEDs
+const uint16_t SEGMENT_OFFSET = SEGMENT_LENGTH + TOTAL_ACTIVE_LEDS;
+
+// Struct for color configuration
+struct ColorConfig {
+    uint32_t primaryColor;
+    uint32_t secondaryColor;
+    uint16_t primaryLEDs;
+    uint16_t secondaryLEDs;
+};
+
+// Function to set pixel colors for a segment
+void setSegmentColors(int segmentStart, uint16_t animationStep, ColorConfig config, bool reverse) {
+    for (int i = 0; i < SEGMENT_LENGTH; i++) {
+        uint16_t index;
+        if (reverse) {
+            // Berechnung für rückwärts laufende Animation
+            index = (SEGMENT_LENGTH - 1 - i + animationStep) % SEGMENT_OFFSET;
+        } else {
+            // Berechnung für vorwärts laufende Animation
+            index = (i + animationStep) % SEGMENT_OFFSET;
+        }
+        uint32_t color = index < config.primaryLEDs ? config.primaryColor : config.secondaryColor;
+        if (index < TOTAL_ACTIVE_LEDS) {
+            SEGMENT.setPixelColor(segmentStart + i, color);
+        }
+    }
+}
+
+// Main animation function
 uint16_t animation2b(void) {
-
-  if(!animation2breset) {
-    animation2bStartTime = strip.now;
-    animation2breset = true;
-    return FRAMETIME;
-  }
-
-  uint32_t cycleTime = 10000; 
-  uint32_t cycleProgress = strip.now % cycleTime; 
-  uint32_t blueCycleProgress = (strip.now + (cycleTime / 3)) % cycleTime; // Offset um 3,33 Sekunden
-  uint16_t animationStep = (cycleProgress * (SEGMENT_LENGTH + 36)) / cycleTime; 
-  uint16_t blueAnimationStep = (blueCycleProgress * (SEGMENT_LENGTH + 36)) / cycleTime;
-
-  uint32_t colors[] = {0xFFFFFF, 0xFF0000};  // Weiß, Rot
-  uint32_t altColors[] = {0xFFFFFF, 0x0000FF}; // Weiß, Blau
-  uint16_t ledsPerColor[] = {4, 32};  // 4 weiße LEDs, 32 rote/blauen LEDs
-  uint16_t totalActiveLeds = ledsPerColor[0] + ledsPerColor[1]; // Insgesamt 36 LEDs
-
-  for (int i = 0; i < SEGMENT_LENGTH; i++) {
-    // Standardmäßig LEDs ausschalten
-    SEGMENT.setPixelColor(i, 0);
-    SEGMENT.setPixelColor(SEGMENT_LENGTH + i, 0);
-    SEGMENT.setPixelColor(2 * SEGMENT_LENGTH + i, 0);
-    SEGMENT.setPixelColor(3 * SEGMENT_LENGTH + i, 0);
-
-    if (animationStep < SEGMENT_LENGTH + totalActiveLeds) {
-      // Animation für das erste Segment
-      uint16_t index1 = (SEGMENT_LENGTH - 1 - i + animationStep) % (SEGMENT_LENGTH + totalActiveLeds);
-      uint32_t color1 = index1 < ledsPerColor[0] ? colors[0] : colors[1];
-
-      if (index1 < totalActiveLeds) {
-        SEGMENT.setPixelColor(i, color1); 
-      }
-
-      // Animation für das zweite Segment
-      uint16_t index2 = (i + animationStep) % (SEGMENT_LENGTH + totalActiveLeds);
-      uint32_t color2 = index2 < ledsPerColor[0] ? colors[0] : colors[1];
-
-      if (index2 < totalActiveLeds) {
-        SEGMENT.setPixelColor(SEGMENT_LENGTH + i, color2); 
-      }
+    if(!animation2breset) {
+        animation2bStartTime = strip.now;
+        animation2breset = true;
+        return FRAMETIME;
     }
 
-    if (blueAnimationStep < SEGMENT_LENGTH + totalActiveLeds) {
-      // Animation für das dritte Segment (blau)
-      uint16_t index3 = (SEGMENT_LENGTH - 1 - i + blueAnimationStep) % (SEGMENT_LENGTH + totalActiveLeds);
-      uint32_t color3 = index3 < ledsPerColor[0] ? altColors[0] : altColors[1];
+    uint32_t cycleProgress = strip.now % CYCLE_TIME;
+    uint32_t blueCycleProgress = (strip.now + (CYCLE_TIME / 3)) % CYCLE_TIME;
+    uint16_t animationStep = (cycleProgress * SEGMENT_OFFSET) / CYCLE_TIME;
+    uint16_t blueAnimationStep = (blueCycleProgress * SEGMENT_OFFSET) / CYCLE_TIME;
 
-      if (index3 < totalActiveLeds) {
-        SEGMENT.setPixelColor(2 * SEGMENT_LENGTH + i, color3); 
-      }
-
-      // Animation für das vierte Segment (blau)
-      uint16_t index4 = (i + blueAnimationStep) % (SEGMENT_LENGTH + totalActiveLeds);
-      uint32_t color4 = index4 < ledsPerColor[0] ? altColors[0] : altColors[1];
-
-      if (index4 < totalActiveLeds) {
-        SEGMENT.setPixelColor(3 * SEGMENT_LENGTH + i, color4); 
-      }
+    ColorConfig redConfig = {0xFFFFFF, 0xFF0000, 4, 32};
+    ColorConfig blueConfig = {0xFFFFFF, 0x0000FF, 4, 32};
+    ColorConfig newLightConfig = {0xFFFFFF, 0x00FFFF, 4, 16};
+    // Turn off all LEDs initially
+    for (int i = 0; i < SEGMENT_LENGTH * 4; i++) {
+        SEGMENT.setPixelColor(i, 0);
     }
-  }
-  return FRAMETIME;
+
+    bool isRedSecondPhase = animationStep >= (SEGMENT_OFFSET / 2);
+    bool isBlueSecondPhase = blueAnimationStep >= (SEGMENT_LENGTH / 2);
+    bool isRedNearEnd = (SEGMENT_LENGTH - animationStep) <= 10;
+
+
+     // Setzen der Farben für jedes Segment mit Berücksichtigung der Richtung
+    if (!isRedSecondPhase) {
+        // Erste Phase: Animation läuft nur auf Segment 1
+        setSegmentColors(0, animationStep, redConfig, true);
+    } else {
+        // Zweite Phase: Animation wechselt zu Segment 2
+        setSegmentColors(SEGMENT_LENGTH, animationStep, redConfig, false);
+    }
+
+     if (!isBlueSecondPhase) {
+        setSegmentColors(2 * SEGMENT_LENGTH, blueAnimationStep, blueConfig, true); // Segment 3 rückwärts
+     } else {
+        setSegmentColors(3 * SEGMENT_LENGTH, blueAnimationStep, blueConfig, false); // Segment 4 vorwärts
+     }
+
+     if (isRedNearEnd && !newLightStarted) {
+      newLightStarted = true;
+      newLightStartTime = strip.now; // Startzeitpunkt des neuen Lichts festlegen
+}
+
+    if (newLightStarted) {
+    // Berechnen des Fortschritts des neuen Lichts basierend auf seiner eigenen Startzeit
+    uint32_t newLightProgress = (strip.now - newLightStartTime) % CYCLE_TIME;
+    uint16_t newLightAnimationStep = (newLightProgress * SEGMENT_OFFSET) / CYCLE_TIME;
+
+    // Stellen Sie sicher, dass das neue Licht unabhängig animiert wird
+    setSegmentColors(0, newLightAnimationStep, newLightConfig, true);
+}
+   if (animationStep == 155) {
+    Serial.println("animation 2b finished");
+    currentEffect = 0;
+    
+}
+return FRAMETIME;
 }
 
 
@@ -205,7 +231,7 @@ uint16_t playlist(void) {
 
   if (lastChangeTime == 0) {
     lastChangeTime = now;
-    initAnimation1c();
+    resetTimebase();
   }
 
   switch (currentEffect) {
